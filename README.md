@@ -21,7 +21,7 @@ are names of their respective owner and are used here only to describe compatibi
 - `firmware/transmitter/` — ESP32 IR transmitter (ESP-IDF), controlled over MRRoIP
 - `tools/` — decoder, encoder, USB serial extraction, bench automation
 - `rigol_capture.py` — Rigol DS1000Z capture over LAN
-- `PROJECT-BRIEF.md` — scope and build order
+- `PROJECT-BRIEF.md` — the original brief and build order; `CLAUDE.md` — current state
 
 ## Status
 

@@ -43,7 +43,7 @@ already covers most of what Stage 3's sweep was meant to find.
 |---|---|---|
 | CarManager | 1.36 (Windows x64/x86, **macOS 13+**; no Linux) | **1.32** on the Windows laptop — all captures and the settings sweep were made with 1.32 |
 | IR Mini 8403 | **1.08** (2026-04-13; file downloaded by the owner, not installed) | **1.06** (confirmed by `Ver` = `01 06` in every capture) — all findings apply to 1.06 only |
-| Vehicles | 1.52 (2026-09-28) | 1.48 (updated April 2026); no vehicle tests yet |
+| Vehicles | 1.52 (2026-09-28) | 1.48 (updated April 2026); first vehicle tests 2026-10-07 (`module-design.md`), truck firmware not recorded |
 | InduktivCharger 8408 | 1.14 | — |
 | Turnout (Abzweig) | 1.06 | — |
 | IR Scanner 8406 | 1.00 | — |

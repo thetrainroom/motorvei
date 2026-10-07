@@ -3,6 +3,9 @@
 Project brief for Claude Code. Read this first; it defines scope, hardware,
 data formats and the build order.
 
+> **Original brief from 2026-09-26** (only the wording adjusted for publication). Many open questions
+> below are answered since; the current state is in `CLAUDE.md` and `docs/README.md`.
+
 ---
 
 ## 1. Goal
