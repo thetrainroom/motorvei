@@ -1,0 +1,584 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>CarMotion IR-Spezifikation</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm 18mm 16mm; }
+  :root { --ink: #1b1f24; --muted: #5a6470; --line: #d5dae0; --accent: #0b5cad; --code-bg: #f3f5f7; }
+  html { font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; font-size: 10pt; color: var(--ink); line-height: 1.45; }
+  body { margin: 0; background: #fff; }
+  h1 { font-size: 22pt; margin: 0 0 4pt; color: var(--accent); }
+  h2 { font-size: 14pt; margin: 18pt 0 6pt; padding-bottom: 3pt; border-bottom: 1.5pt solid var(--accent); break-after: avoid; }
+  h3 { font-size: 11pt; margin: 12pt 0 4pt; break-after: avoid; }
+  p { margin: 4pt 0 6pt; }
+  .subtitle { color: var(--muted); font-size: 11pt; margin-bottom: 14pt; }
+  .note { border-left: 3pt solid var(--accent); background: #eef4fb; padding: 6pt 9pt; margin: 8pt 0; }
+  .warn { border-left: 3pt solid #b3261e; background: #fbeeee; padding: 6pt 9pt; margin: 8pt 0; }
+  table { border-collapse: collapse; width: 100%; margin: 6pt 0 10pt; font-size: 9pt; break-inside: avoid; }
+  th, td { border: 0.6pt solid var(--line); padding: 3pt 5pt; text-align: left; vertical-align: top; }
+  th { background: #eef1f4; font-weight: 600; }
+  tr { break-inside: avoid; }
+  code, pre { font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 8.6pt; }
+  code { background: var(--code-bg); padding: 0 2pt; border-radius: 2pt; white-space: nowrap; }
+  pre { background: var(--code-bg); padding: 6pt 8pt; border-radius: 3pt; white-space: pre-wrap; break-inside: avoid; margin: 6pt 0 10pt; }
+  ul, ol { margin: 4pt 0 8pt; padding-left: 16pt; }
+  li { margin: 2pt 0; }
+  .toc { columns: 2; column-gap: 20pt; margin: 6pt 0 10pt; }
+  .toc a { color: var(--ink); text-decoration: none; }
+  .small { font-size: 8.5pt; color: var(--muted); }
+  .pagebreak { break-before: page; }
+</style>
+</head>
+<body>
+
+<h1>Viessmann CarMotion – IR-Protokoll und IR-Mini-Modul</h1>
+<div class="subtitle">Technische Spezifikation aus Messungen · Stand 29. September 2026</div>
+
+<div class="note">
+<strong>Geltungsbereich.</strong> Alle Angaben beruhen auf Messungen am IR-Mini-Modul 8403 mit <strong>Firmware 1.06</strong>
+und der Software CarManager 1.32 (Windows): Oszilloskop-Aufnahmen des IR-Ausgangs und USB-Mitschnitte dessen, was
+CarManager ins Modul schreibt. Die Firmware wurde weder ausgelesen noch disassembliert. Reaktionen der Fahrzeuge sind
+dem CarManager-Handbuch entnommen und von uns <strong>noch nicht mit einem Fahrzeug geprüft</strong>. Unsicheres ist als
+solches gekennzeichnet.
+</div>
+
+<div class="toc">
+<ol>
+<li><a href="#s1">Überblick</a></li>
+<li><a href="#s2">Physikalische Schicht</a></li>
+<li><a href="#s3">Rahmenformat, Flag und CRC</a></li>
+<li><a href="#s4">Befehlsbytes</a></li>
+<li><a href="#s5">Befehlsreferenz</a></li>
+<li><a href="#s6">Zwei Codes pro Slot, getrennte Kanäle</a></li>
+<li><a href="#s7">Getrennte Kanäle mit beliebigen Befehlen (Anleitung)</a></li>
+<li><a href="#s8">Speicherformat der Codes (Codeblock)</a></li>
+<li><a href="#s9">Programmierschnittstelle (8401)</a></li>
+<li><a href="#s10">CV-Tabelle des IR-Mini</a></li>
+<li><a href="#s11">Weitere IR-Protokolle</a></li>
+<li><a href="#s12">Eigenes offenes Modul („Maxi“)</a></li>
+<li><a href="#s13">Offene Punkte</a></li>
+</ol>
+</div>
+
+<h2 id="s1">1 Überblick</h2>
+<ul>
+<li><strong>Kein Träger.</strong> Jedes Bit ist ein einzelner IR-Blitz (26 µs oder 21 µs). Der Abstand bis zum nächsten
+Blitz ist das Bit: 90 µs = 0, 130 µs = 1, 169 µs = Synchron-/Endzeichen.</li>
+<li><strong>Rahmen:</strong> <code>S S S · Flag · Bytes … · CRC · S</code>. Das Flag sagt, ob die Bytes invertiert gesendet
+werden; die Prüfsumme ist CRC-8/MAXIM. Bestätigt an jedem aufgezeichneten Rahmen und jedem Codeblock.</li>
+<li><strong>Befehle:</strong> Byte 1 ist ein Empfängerfilter (Spur, Fahrtrichtung) plus Untertyp-Bits, Byte 2 ist Typ + Wert:
+Geschwindigkeit <code>20 + km/h÷5</code>, Magnetfolgen <code>40–47</code>, Spuren <code>17–1E</code>, Funktionen
+<code>60–6B</code> (<code>+10</code> dauerhaft), Stopp/Weiterfahren/Bremsen/Makros/Rückwärts.</li>
+<li><strong>Reichweite:</strong> „Sendeleistung“ ist die Blitzlänge (CV3 + 1 µs), nicht der LED-Strom.
+„Nahbereich“ verkürzt den Blitz von 26 auf 21 µs. „Eigene Distanz“ ist ein Datenbyte in cm.</li>
+<li><strong>Programmierung:</strong> serielle Textbefehle über einen CP210x (38400 Baud, 8E1): <code>Who</code>,
+<code>Ver</code>, <code>cr</code> (CV lesen), <code>cW</code> (CV schreiben). CarManager schreibt fertige Codeblöcke in
+drei Befehlsslots; das Modul spielt sie nur ab. Deshalb lässt sich <strong>jeder</strong> gültige Befehl senden,
+auch auf getrennten Kanälen.</li>
+</ul>
+
+<h2 id="s2">2 Physikalische Schicht</h2>
+<p>Gemessen an den LED-Anschlüssen (Rigol DS1104Z Plus, 10 MSa/s, 1,2 s Speicher). Bei 100 ns pro Abtastwert wäre ein
+38-kHz-Träger mit rund 260 Werten pro Periode sichtbar; sein Fehlen ist eine direkte Beobachtung.</p>
+<table>
+<tr><th>Eigenschaft</th><th>Wert</th></tr>
+<tr><td>Träger</td><td>keiner – jede Marke ist ein einzelner Blitz</td></tr>
+<tr><td>Blitzlänge lang</td><td>26,1–26,3 µs (Werkseinstellung)</td></tr>
+<tr><td>Blitzlänge kurz</td><td>21,2–21,4 µs</td></tr>
+<tr><td>Pegel an der LED</td><td>ca. 4,95 V, gleich für beide Blitzlängen</td></tr>
+<tr><td>Bit 0</td><td>90 µs von Blitz zu Blitz</td></tr>
+<tr><td>Bit 1</td><td>130 µs</td></tr>
+<tr><td>Synchron-/Endzeichen S</td><td>169 µs (kommt in Daten nie vor)</td></tr>
+<tr><td>Raster</td><td>Perioden = 50,5 µs + k × 39,5 µs, k = 1, 2, 3; stabil auf ±1 µs (steigende Flanke zu steigender Flanke)</td></tr>
+</table>
+<pre>
+ Blitz                 Blitz        Blitz         Blitz
+  ▌                     ▌            ▌             ▌
+  |<------ 169 µs ----->|<- 90 µs -->|<-- 130 µs -->|
+       Sync / Ende           Bit 0         Bit 1
+</pre>
+
+<h3>Wiederholung</h3>
+<ul>
+<li>Ein aktiver Befehl wird ununterbrochen wiederholt: etwa 75–100 gültige Rahmen pro 1,2 s.</li>
+<li>Ein 3-Byte-Rahmen hat 25 Bit und dauert rund 3,4 ms; ein 4-Byte-Rahmen (Rückwärts + Distanz) 33 Bit.</li>
+<li>Enthält ein Slot zwei verschiedene Codes, wechseln sie sich ab: paarweise im Abstand von etwa 4,9–5,0 ms, danach eine
+<strong>zufällige Pause von etwa 10–20 ms</strong>, damit benachbarte Sender nicht dauerhaft kollidieren.</li>
+</ul>
+
+<h3>Reichweite</h3>
+<table>
+<tr><th>Einstellung</th><th>Wirkung</th></tr>
+<tr><td>Sendeleistung (CV3, Werk 25)</td><td>Blitzlänge lang ≈ CV3 + 1 µs: 25 → 26 µs, 15 → 16 µs (gemessen)</td></tr>
+<tr><td>Zusätzliche Annäherung (CV4, Werk 5)</td><td>Blitzlänge kurz ≈ CV3 − CV4 + 1 µs = 21 µs</td></tr>
+<tr><td>Nahbereichssignale</td><td>alle Blitze kurz (21 µs); Pegel und Bitzeiten unverändert; nur die Options-CV ändert sich</td></tr>
+<tr><td>Eigene Distanz</td><td>keine physikalische Einstellung, sondern ein Datenbyte in cm im Rahmen</td></tr>
+</table>
+<p class="small">Gemessen wurde die Spannung an der LED, nicht der LED-Strom oder die Lichtleistung. Gleiche Spannung spricht
+stark für unveränderten Strom; eine Messung mit Messwiderstand oder Fotodiode steht noch aus.</p>
+
+<h3>Zwei LED-Ausgänge</h3>
+<p>Das IR-Mini hat zwei IR-LEDs. Die LED mit der <strong>weißen Markierung am Kabel</strong> ist laut Handbuch die Stopp-LED.
+Im Modus „Bremsen + Anhalten (getrennte Kanäle)“ sendet sie Code 1, die unmarkierte LED Code 2 (Messung und Handbuch
+übereinstimmend).</p>
+
+<h2 id="s3">3 Rahmenformat, Flag und CRC</h2>
+<pre>[Sync S S S] [Flag] [Byte 1] [Byte 2] … [CRC] [Ende S]</pre>
+<table>
+<tr><th>Feld</th><th>Inhalt</th></tr>
+<tr><td>Sync</td><td>3 × 169 µs</td></tr>
+<tr><td>Flag</td><td>1 Bit. <code>1</code>: Bytes werden unverändert gesendet. <code>0</code>: jedes Byte wird bitweise invertiert gesendet</td></tr>
+<tr><td>Bytes</td><td>Befehlsbytes, höchstwertiges Bit zuerst, dann das CRC-Byte</td></tr>
+<tr><td>CRC</td><td><strong>CRC-8/MAXIM</strong> (Dallas 1-Wire): Polynom 0x31 reflektiert = 0x8C, Startwert 0x00, kein End-XOR, über die Befehlsbytes</td></tr>
+<tr><td>Ende</td><td>1 × 169 µs</td></tr>
+</table>
+
+<h3>Wahl des Flags</h3>
+<p>Der Sender wählt die Polarität mit <strong>weniger 1-Bits auf der Luft</strong> (eine 1 kostet 130 µs, eine 0 nur
+90 µs, der Rahmen wird also kürzer). Bei Gleichstand ist das Flag <code>0</code> (invertiert).</p>
+<table>
+<tr><th>Daten</th><th>1-Bits unverändert</th><th>Flag</th><th>Bits auf der Luft</th></tr>
+<tr><td><code>BE 01 80</code> (Stopp)</td><td>8 von 24</td><td>1</td><td><code>1 10111110 00000001 10000000</code></td></tr>
+<tr><td><code>BE 2A 83</code> (50 km/h)</td><td>12 von 24 (Gleichstand)</td><td>0</td><td><code>0 01000001 11010101 01111100</code></td></tr>
+<tr><td><code>BE 22 41</code> (10 km/h)</td><td>10 von 24</td><td>1</td><td><code>1 10111110 00100010 01000001</code></td></tr>
+<tr><td><code>BE 13 1E 73</code> (Rückwärts, 30 cm)</td><td>18 von 32</td><td>0</td><td><code>0 01000001 11101100 11100001 10001100</code></td></tr>
+</table>
+
+<h3>Referenzimplementierung</h3>
+<pre>def crc8_maxim(data):
+    c = 0
+    for b in data:
+        c ^= b
+        for _ in range(8):
+            c = (c &gt;&gt; 1) ^ 0x8C if c &amp; 1 else c &gt;&gt; 1
+    return c
+
+def frame_bits(cmd):                       # cmd: Befehlsbytes ohne CRC
+    data = list(cmd) + [crc8_maxim(cmd)]
+    ones = sum(bin(b).count("1") for b in data)
+    flag = 1 if ones &lt; 8 * len(data) - ones else 0
+    air = data if flag else [b ^ 0xFF for b in data]
+    return str(flag) + "".join(format(b, "08b") for b in air)</pre>
+
+<h2 id="s4">4 Befehlsbytes</h2>
+<p>Alle beobachteten Befehle bestehen aus 2 Befehlsbytes + CRC; „Rückwärts mit eigener Distanz“, die Rollende Landstraße
+und Optionen mit Distanz haben ein drittes Byte.</p>
+
+<h3>Byte 1: Empfängerfilter</h3>
+<table>
+<tr><th>Bit</th><th>Bedeutung</th></tr>
+<tr><td>7</td><td>Untertyp-Bit, je nach Gruppe (siehe unten)</td></tr>
+<tr><td>6</td><td>0 (nie gesetzt beobachtet)</td></tr>
+<tr><td>5</td><td>Fahrzeuge auf Spur 2 reagieren</td></tr>
+<tr><td>4</td><td>Fahrzeuge auf Spur 1 (Grundspur) reagieren</td></tr>
+<tr><td>3</td><td>Fahrzeuge auf Spur 0 (Halte-/Ausweichspur) reagieren</td></tr>
+<tr><td>2</td><td>Fahrzeuge in Fahrtrichtung A reagieren</td></tr>
+<tr><td>1</td><td>Fahrzeuge in Fahrtrichtung B reagieren</td></tr>
+<tr><td>0</td><td>Untertyp-Bit (Haltespur bei Grundbefehlen, Geschwindigkeitsart)</td></tr>
+</table>
+<p><code>BE</code> = alle Spuren, beide Richtungen (Werk). Die Bits 1–5 entsprechen CV5. Wird ein Filter abgewählt, ist sein
+Bit in jedem Code gelöscht, z. B. Spur 0 aus → <code>B6</code> / <code>36</code>.</p>
+
+<table>
+<tr><th>Gruppe</th><th>Bit 7 gesetzt (<code>BE</code>)</th><th>Bit 7 gelöscht (<code>3E</code>)</th></tr>
+<tr><td>Direkte Funktionen</td><td>ein</td><td>aus</td></tr>
+<tr><td>Stopp / Weiterfahren</td><td>zweiter Code des Slots (langer Blitz)</td><td>erster Code (kurzer Blitz)</td></tr>
+<tr><td>Magnetfolge</td><td>Magnetfolge-Befehl</td><td>„Halt am Magneten“ (bei Bremsen + Anhalten)</td></tr>
+<tr><td>Geschwindigkeit</td><td colspan="2">Bits 7 und 0 wählen die Art: <code>BE</code> setzen, <code>3E</code> Minimum, <code>3F</code> Maximum, <code>BF</code> Standard</td></tr>
+</table>
+
+<h3>Byte 2: Typ und Wert</h3>
+<table>
+<tr><th>Byte 2</th><th>Bedeutung</th></tr>
+<tr><td><code>00</code></td><td>Weiterfahren / Losfahren</td></tr>
+<tr><td><code>01</code></td><td>Anhalten (Stopp)</td></tr>
+<tr><td><code>02</code></td><td>Bremsen</td></tr>
+<tr><td><code>03</code></td><td>Standard-Fahrmodus wiederherstellen (Befehle löschen, wie Magnetfolge S-N)</td></tr>
+<tr><td><code>04</code>–<code>11</code></td><td>Makro n = <code>03</code> + n (Makro 1 … 14)</td></tr>
+<tr><td><code>13</code> [cm]</td><td>Rückwärts, solange im Signal; optional drittes Byte = Distanz in cm</td></tr>
+<tr><td><code>14</code></td><td>Rückwärts bis zum Halt auf einem Magneten</td></tr>
+<tr><td><code>17</code>–<code>1E</code></td><td>Verkehrsspuren</td></tr>
+<tr><td><code>20</code> + n</td><td>Geschwindigkeit n × 5 km/h (CarManager bietet 0–110 km/h)</td></tr>
+<tr><td><code>40</code>–<code>47</code></td><td>Magnetfolge, Polmuster in den unteren Bits</td></tr>
+<tr><td><code>50 F0</code> / <code>51 F0</code> / <code>52 F0</code></td><td>Rollende Landstraße: Ausfahrt / Einfahrt / Einfahrt dicht gepackt</td></tr>
+<tr><td><code>60</code>–<code>6B</code></td><td>Direkte Funktion, vorübergehend</td></tr>
+<tr><td><code>70</code>–<code>77</code></td><td>Direkte Funktion, dauerhaft</td></tr>
+<tr><td><code>80</code>–<code>9F</code></td><td>Grundbefehl mit Optionen (siehe unten)</td></tr>
+<tr><td><code>12</code>, <code>15</code>, <code>16</code>, <code>1F</code>, <code>48</code>–<code>5F</code></td><td>nicht verwendet / ungetestet</td></tr>
+</table>
+
+<h3>Optionen bei Grundbefehlen</h3>
+<p>Ist eine Option gewählt, erhält Byte 2 das Bit 7 plus Optionsbits; die unteren Bits behalten den Befehl.</p>
+<table>
+<tr><th>Option</th><th>Änderung</th><th>Bit in der Options-CV</th><th>Beispiel</th></tr>
+<tr><td>Von Einsatzfahrzeugen ignoriert</td><td>Byte 2 + <code>90</code></td><td><code>10</code></td><td>Stopp → <code>BE 91</code></td></tr>
+<tr><td>Blinker links</td><td>Byte 2 + <code>88</code></td><td><code>08</code></td><td>Bremsen + links → <code>BE 8A</code></td></tr>
+<tr><td>Blinker rechts</td><td>Byte 2 + <code>84</code></td><td><code>04</code></td><td>Stopp + rechts → <code>BE 85</code></td></tr>
+<tr><td>Auf Haltespur wechseln</td><td>Byte 1 Bit 0, Byte 2 + <code>80</code></td><td><code>80</code></td><td>Bremsen + Haltespur → <code>BF 82</code></td></tr>
+<tr><td>Eigene Distanz</td><td>drittes Byte in cm (1–255)</td><td>Distanz-CV</td><td>Bremsen + links + 30 cm → <code>BE 8A 1E</code></td></tr>
+<tr><td>Nahbereich</td><td>nur Blitzlänge</td><td><code>01</code></td><td>–</td></tr>
+<tr><td>Zeitlimit / + Zufall</td><td>vom Modul zeitgesteuert, nicht im Rahmen</td><td>CV56 / CV57</td><td>–</td></tr>
+</table>
+<p>„Kein Befehl“ schreibt den Kopf <code>00</code> (Länge 0) in beide Codeblöcke: es wird nichts gesendet.</p>
+
+<h2 id="s5" class="pagebreak">5 Befehlsreferenz</h2>
+<p>Bytes ohne CRC. Die Spalte <code>cmd</code> ist der Name im eigenen Modul (Abschnitt 12). Fahrzeugreaktionen laut Handbuch.</p>
+
+<h3>Grundbefehle</h3>
+<table>
+<tr><th><code>cmd</code></th><th>Argument</th><th>Fahrzeug</th><th>Bytes</th></tr>
+<tr><td><code>stop</code></td><td>–</td><td>hält zügig, aber vorbildgetreu an – entspricht dem, was ein stehendes Fahrzeug sendet. Zwei Codes: Nahbereich + normal</td><td><code>3E 01</code> (kurz) + <code>BE 01</code></td></tr>
+<tr><td><code>continue</code></td><td>–</td><td>fährt mit der vorherigen Geschwindigkeit los, auch von einem Nordmagneten</td><td><code>3E 00</code> (kurz) + <code>BE 00</code></td></tr>
+<tr><td><code>brake</code></td><td>–</td><td>bremst sanft auf Schrittgeschwindigkeit, wie ein Südmagnet</td><td><code>BE 02</code></td></tr>
+<tr><td><code>restore</code></td><td>–</td><td>löscht vorübergehende Befehle, zurück zum Standard-Fahrmodus</td><td><code>BE 03</code></td></tr>
+<tr><td><code>reverse</code></td><td>Distanz in cm (0 = keine)</td><td>fährt rückwärts, solange im Signal; mit Distanz so weit</td><td><code>BE 13</code> [cm]</td></tr>
+<tr><td><code>reverse_magnet</code></td><td>–</td><td>fährt rückwärts bis zum Halt auf einem Nordmagneten</td><td><code>BE 14</code></td></tr>
+</table>
+
+<h3>Geschwindigkeit</h3>
+<p>Argument in km/h (Modellgeschwindigkeit), 0–155 in 5er-Schritten; Byte 2 = <code>0x20 + km/h ÷ 5</code>. Gemessen bei
+0, 5, 10, 15, 20, 50 und 110 km/h; Werte über 110 km/h passen in die Kodierung, sind aber ungetestet.</p>
+<table>
+<tr><th><code>cmd</code></th><th>Fahrzeug</th><th>Bytes (50 km/h)</th></tr>
+<tr><td><code>speed</code></td><td>setzt die Geschwindigkeit auf den Wert (vorübergehend)</td><td><code>BE 2A</code></td></tr>
+<tr><td><code>speed_min</code></td><td>mindestens diese Geschwindigkeit</td><td><code>3E 2A</code></td></tr>
+<tr><td><code>speed_max</code></td><td>höchstens diese Geschwindigkeit</td><td><code>3F 2A</code></td></tr>
+<tr><td><code>speed_default</code></td><td>ändert die Standardgeschwindigkeit dauerhaft</td><td><code>BF 2A</code></td></tr>
+</table>
+
+<h3>Direkte Funktionen</h3>
+<p>Byte 1 <code>BE</code> = ein, <code>3E</code> = aus. Byte 2 = <code>60</code> + Funktion, <code>+10</code> dauerhaft
+(bleibt nach Aus- und Einschalten des Fahrzeugs erhalten, nur Funktionen 0–7).</p>
+<table>
+<tr><th>Nr.</th><th>Funktion</th><th>ein</th><th>aus</th><th>ein, dauerhaft</th><th>aus, dauerhaft</th></tr>
+<tr><td>0</td><td>Abblendlicht</td><td><code>BE 60</code></td><td><code>3E 60</code></td><td><code>BE 70</code></td><td><code>3E 70</code></td></tr>
+<tr><td>1</td><td>Fernlicht</td><td><code>BE 61</code></td><td><code>3E 61</code></td><td><code>BE 71</code></td><td><code>3E 71</code></td></tr>
+<tr><td>2</td><td>Rundumleuchten</td><td><code>BE 62</code></td><td><code>3E 62</code></td><td><code>BE 72</code></td><td><code>3E 72</code></td></tr>
+<tr><td>3</td><td>Blinker links</td><td><code>BE 63</code></td><td><code>3E 63</code></td><td><code>BE 73</code></td><td><code>3E 73</code></td></tr>
+<tr><td>4</td><td>Blinker rechts</td><td><code>BE 64</code></td><td><code>3E 64</code></td><td><code>BE 74</code></td><td><code>3E 74</code></td></tr>
+<tr><td>5</td><td>Warnblinker</td><td><code>BE 65</code></td><td><code>3E 65</code></td><td><code>BE 75</code></td><td><code>3E 75</code></td></tr>
+<tr><td>6</td><td>Erweiterungsausgang / Universalfunktion 1</td><td><code>BE 66</code></td><td><code>3E 66</code></td><td><code>BE 76</code></td><td><code>3E 76</code></td></tr>
+<tr><td>7</td><td>Universalfunktion 2</td><td><code>BE 67</code></td><td><code>3E 67</code></td><td><code>BE 77</code></td><td><code>3E 77</code></td></tr>
+<tr><td>8</td><td>Geräusch: Sirene</td><td><code>BE 68</code></td><td><code>3E 68</code></td><td>–</td><td>–</td></tr>
+<tr><td>9</td><td>Geräusch: Motor</td><td><code>BE 69</code></td><td><code>3E 69</code></td><td>–</td><td>–</td></tr>
+<tr><td>10</td><td>Geräusch: Hupe</td><td><code>BE 6A</code></td><td><code>3E 6A</code></td><td>–</td><td>–</td></tr>
+<tr><td>11</td><td>Geräusch: Rufen</td><td><code>BE 6B</code></td><td><code>3E 6B</code></td><td>–</td><td>–</td></tr>
+</table>
+<p class="small">Ob Geräusche <code>BE</code> brauchen oder in beiden Fällen abgespielt werden, ist offen.</p>
+
+<h3>Verkehrsspuren (<code>lane</code>)</h3>
+<table>
+<tr><th>Argument</th><th>Fahrzeug</th><th>Bytes</th></tr>
+<tr><td>0</td><td>setzt Spur 0 (Ausweich-/Haltespur)</td><td><code>BE 17</code></td></tr>
+<tr><td>1</td><td>setzt Spur 1 (Grundspur)</td><td><code>BE 18</code></td></tr>
+<tr><td>2</td><td>setzt Spur 2 (innere Spur)</td><td><code>BE 19</code></td></tr>
+<tr><td>3</td><td>Sonderstatus aktivieren</td><td><code>BE 1A</code></td></tr>
+<tr><td>4</td><td>Sonderstatus deaktivieren</td><td><code>BE 1B</code></td></tr>
+<tr><td>5</td><td>Sonderstatus umschalten – in Wiederholschleifen vermeiden</td><td><code>BE 1C</code></td></tr>
+<tr><td>6</td><td>Fahrtrichtung A setzen</td><td><code>BE 1D</code></td></tr>
+<tr><td>7</td><td>Fahrtrichtung B setzen</td><td><code>BE 1E</code></td></tr>
+</table>
+
+<h3>Magnetfolgen (<code>magnet</code>)</h3>
+<p>Wirkt, als wäre das Fahrzeug über diese Folge von Dauermagneten gefahren, solange das Modul sendet. Die unteren 3 Bits sind
+das Polmuster binär, <strong>S = 1, N = 0</strong>. Ein N-Magnet bedeutet immer „sofort halten“, daher beginnt jedes längere
+Muster mit S – die führende 1 wirkt als Startbit und kodiert zugleich die Länge.</p>
+<table>
+<tr><th>Argument</th><th>Muster</th><th>Standardbedeutung im Fahrzeug</th><th>Bytes</th></tr>
+<tr><td>0</td><td>N</td><td>Halt</td><td><code>BE 40</code></td></tr>
+<tr><td>1</td><td>S</td><td>Bremsen</td><td><code>BE 41</code></td></tr>
+<tr><td>2</td><td>SN</td><td>Befehle löschen</td><td><code>BE 42</code></td></tr>
+<tr><td>3</td><td>SS</td><td>je nach Fahrzeugkonfiguration</td><td><code>BE 43</code></td></tr>
+<tr><td>4</td><td>SNN</td><td>je nach Fahrzeugkonfiguration</td><td><code>BE 44</code></td></tr>
+<tr><td>5</td><td>SNS</td><td>je nach Fahrzeugkonfiguration</td><td><code>BE 45</code></td></tr>
+<tr><td>6</td><td>SSN</td><td>je nach Fahrzeugkonfiguration</td><td><code>BE 46</code></td></tr>
+<tr><td>7</td><td>SSS</td><td>Fernlicht ein (Werk)</td><td><code>BE 47</code></td></tr>
+</table>
+<p class="small"><code>48</code>–<code>5F</code> würden 4er- und 5er-Muster nach demselben Schema kodieren; CarManager bietet sie
+nicht an, ungetestet.</p>
+
+<h3>Makros und Rollende Landstraße</h3>
+<ul>
+<li><code>macro</code>, Argument 1–14: startet das <strong>im Fahrzeug</strong> gespeicherte Makro; Bytes <code>BE 03+n</code>
+(Makro 1 = <code>BE 04</code> … Makro 14 = <code>BE 11</code>). Makro 1 und 2 sind standardmäßig Blinker links / rechts.</li>
+<li><code>rolling_highway</code>: 0 Ausfahrt <code>BE 50 F0</code>, 1 Einfahrt <code>BE 51 F0</code>, 2 Einfahrt dicht gepackt
+<code>BE 52 F0</code>.</li>
+</ul>
+
+<div class="warn">Nicht verwendete oder ungetestete Bytewerte können unbekanntes Fahrzeugverhalten auslösen, bis hin zu
+Konfigurations- oder Rücksetzbefehlen. Versuche nur mit einem Ersatzfahrzeug mit gesicherter Konfiguration.</div>
+
+<h2 id="s6">6 Zwei Codes pro Slot, getrennte Kanäle</h2>
+<p>Jeder Befehlsslot enthält zwei Codeblöcke (Code 1, Code 2):</p>
+<table>
+<tr><th>Befehl in CarManager</th><th>Code 1</th><th>Code 2</th><th>Ausgabe</th></tr>
+<tr><td>Anhalten</td><td><code>3E 01</code></td><td><code>BE 01</code></td><td>abwechselnd; Code 1 mit 21 µs, Code 2 mit 26 µs</td></tr>
+<tr><td>Weiterfahren</td><td><code>3E 00</code></td><td><code>BE 00</code></td><td>ebenso</td></tr>
+<tr><td>Bremsen, Makros, Geschwindigkeit, Spuren, Funktionen, Magnete</td><td colspan="2">derselbe Code in beiden</td><td>eine Rahmenart</td></tr>
+<tr><td><strong>Bremsen + Anhalten (getrennte Kanäle)</strong></td><td><code>3E 40</code></td><td><code>BE 02</code></td><td>Code 1 nur auf der weiß markierten LED (Halt), Code 2 nur auf der anderen LED (Bremsen)</td></tr>
+</table>
+<p>Bei „Bremsen + Anhalten“ bremst das Fahrzeug zuerst (LED 2) und hält dann am nächsten N-Magneten (LED 1). Fällt nach dem
+Bremsbefehl der Strom aus, hält das Auto trotzdem mechanisch am Magneten.</p>
+<div class="note"><strong>Beliebige Befehle pro LED.</strong> Das Modul interpretiert die Befehle nicht, es spielt die
+gespeicherten Blöcke ab. Selbst erstellte Blöcke werden sofort gesendet, auch im Modus mit getrennten Kanälen: Code 1 geht
+auf die weiß markierte LED, Code 2 auf die andere. Nachgewiesen z. B. mit „Geschwindigkeit 30 km/h“ neben dem Bremscode
+und mit „Abblendlicht dauerhaft ein“. Die Beschränkung auf Bremsen + Anhalten liegt allein in CarManager. Anleitung: Abschnitt 7.</div>
+
+<h2 id="s7" class="pagebreak">7 Getrennte Kanäle mit beliebigen Befehlen (Anleitung)</h2>
+<p>CarManager bietet „getrennte Kanäle“ nur als <strong>Bremsen + Anhalten</strong> an. Das Modul selbst kennt diese
+Einschränkung nicht: Es sendet Code 1 auf der weiß markierten LED und Code 2 auf der anderen LED, egal was darin steht. Mit
+„Direkte Konfiguration“ in CarManager lassen sich die beiden Codes durch beliebige Befehle ersetzen, ohne zusätzliche
+Werkzeuge.</p>
+
+<div class="warn"><strong>Vorher lesen:</strong> Geprüft mit IR-Mini-Firmware 1.06 auf dem Oszilloskop; die Wirkung auf
+Fahrzeuge ist noch nicht getestet. Vor dem Ändern eine Sicherung in CarManager anlegen (Backup, <code>*.clone</code>).
+CV8 nie schreiben (Werksreset). Das Modul nach der Änderung nicht auf eine neue Firmware aktualisieren, ohne sie vorher zu
+prüfen.</div>
+
+<h3>Schritt 1: Den richtigen Slot finden</h3>
+<p>Welcher Slot gesendet wird, hängt vom Eingangszustand ab. Die Codes stehen in diesen CVs:</p>
+<table>
+<tr><th>Situation</th><th>Slot</th><th>Code 1 → weiß markierte LED</th><th>Code 2 → andere LED</th></tr>
+<tr><td>Analog: blaue Leitung verbunden · DCC: Befehl „rot“</td><td>1</td><td>CV12–17</td><td>CV18–23</td></tr>
+<tr><td>DCC: Befehl „grün“</td><td>2</td><td>CV27–32</td><td>CV33–38</td></tr>
+<tr><td>Analog: blaue Leitung offen (auch DCC ohne Digitalsignal)</td><td>3</td><td>CV42–47</td><td>CV48–53</td></tr>
+</table>
+
+<h3>Schritt 2: Den Slot auf „Bremsen + Anhalten“ stellen</h3>
+<p>In CarManager für diesen Slot „Bremsen + Anhalten (getrennte Kanäle)“ wählen und übernehmen. Damit stehen in beiden
+Codeblöcken das Bit für getrennte Kanäle und in den Menü-CVs ein passender Eintrag. Danach werden nur noch die Codeblöcke
+ersetzt – einer oder beide.</p>
+
+<h3>Schritt 3: Werte aus der Tabelle eintragen</h3>
+<p>Jeder Codeblock besteht aus 6 CVs. Unter „Direkte Konfiguration“ die sechs Werte der Reihe nach in die CVs aus Schritt 1
+schreiben (z. B. CV12, CV13 … CV17 für Code 1 in Slot 1). Die Werte sind in Hexadezimal und Dezimal angegeben; alle mit
+gesetztem Bit „getrennte Kanäle“ und langem Blitz (normale Reichweite).</p>
+<table>
+<tr><th>Befehl</th><th>Befehlsbytes</th><th>6 CVs (hex)</th><th>6 CVs (dezimal)</th></tr>
+<tr><td>Anhalten (Stopp)</td><td><code>BE 01</code></td><td><code>E3 41 FE 7F 00 00</code></td><td><code>227 65 254 127 0 0</code></td></tr>
+<tr><td>Halt am Magneten (Code 1 des Originals)</td><td><code>3E 40</code></td><td><code>63 3E 40 B7 00 00</code></td><td><code>99 62 64 183 0 0</code></td></tr>
+<tr><td>Bremsen</td><td><code>BE 02</code></td><td><code>E3 41 FD 9D 00 00</code></td><td><code>227 65 253 157 0 0</code></td></tr>
+<tr><td>Weiterfahren</td><td><code>BE 00</code></td><td><code>63 BE 00 DE 00 00</code></td><td><code>99 190 0 222 0 0</code></td></tr>
+<tr><td>Geschwindigkeit 30 km/h</td><td><code>BE 26</code></td><td><code>E3 41 D9 DF 00 00</code></td><td><code>227 65 217 223 0 0</code></td></tr>
+<tr><td>Geschwindigkeit 50 km/h</td><td><code>BE 2A</code></td><td><code>63 BE 2A 83 00 00</code></td><td><code>99 190 42 131 0 0</code></td></tr>
+<tr><td>Abblendlicht ein, dauerhaft</td><td><code>BE 70</code></td><td><code>63 BE 70 26 00 00</code></td><td><code>99 190 112 38 0 0</code></td></tr>
+<tr><td>Blinker links ein</td><td><code>BE 63</code></td><td><code>63 BE 63 59 00 00</code></td><td><code>99 190 99 89 0 0</code></td></tr>
+<tr><td>Blinker rechts ein</td><td><code>BE 64</code></td><td><code>63 BE 64 DA 00 00</code></td><td><code>99 190 100 218 0 0</code></td></tr>
+<tr><td>Warnblinker ein</td><td><code>BE 65</code></td><td><code>63 BE 65 84 00 00</code></td><td><code>99 190 101 132 0 0</code></td></tr>
+<tr><td>Makro 1</td><td><code>BE 04</code></td><td><code>63 BE 04 BF 00 00</code></td><td><code>99 190 4 191 0 0</code></td></tr>
+<tr><td>Magnetfolge N (sofort halten)</td><td><code>BE 40</code></td><td><code>E3 41 BF 67 00 00</code></td><td><code>227 65 191 103 0 0</code></td></tr>
+<tr><td>Rückwärts, 30 cm</td><td><code>BE 13 1E</code></td><td><code>64 BE 13 1E 73 00</code></td><td><code>100 190 19 30 115 0</code></td></tr>
+</table>
+<ul>
+<li><strong>Kurzer Blitz (Nahbereich)</strong> für einen einzelnen Befehl: vom ersten Wert 64 abziehen (hex <code>40</code>),
+z. B. Geschwindigkeit 30 km/h kurz = <code>163 65 217 223 0 0</code>. Das Original sendet „Halt am Magneten“ kurz:
+<code>35 62 64 183 0 0</code>.</li>
+<li>Die Option „Nahbereichssignale“ (Options-CV Bit <code>01</code>) macht alle Blitze kurz – ausgeschaltet lassen, wenn die
+Blitzlänge pro Code gelten soll.</li>
+<li>Andere Befehle: Bytes aus Abschnitt 5, Block nach Abschnitt 8 berechnen (Kopf = Flag · 128 + lang · 64 + 32 + Anzahl
+Bytes; gespeicherte Bytes = Bytes auf der Luft invertiert) oder mit dem Werkzeug <code>tools/cmdcode.py</code>.</li>
+</ul>
+
+<h3>Beispiele</h3>
+<table>
+<tr><th>Anwendung</th><th>Weiß markierte LED (Code 1)</th><th>Andere LED (Code 2)</th></tr>
+<tr><td>Tempo-30-Zone mit Licht</td><td>Geschwindigkeit 30 km/h: CV12–17 = <code>227 65 217 223 0 0</code></td><td>Abblendlicht ein, dauerhaft: CV18–23 = <code>99 190 112 38 0 0</code></td></tr>
+<tr><td>Bushaltestelle rechts</td><td>Anhalten: CV12–17 = <code>227 65 254 127 0 0</code></td><td>Blinker rechts ein: CV18–23 = <code>99 190 100 218 0 0</code></td></tr>
+<tr><td>Abbiegen links vor der Kreuzung</td><td>Blinker links ein: CV12–17 = <code>99 190 99 89 0 0</code></td><td>Bremsen: CV18–23 = <code>227 65 253 157 0 0</code></td></tr>
+</table>
+<p class="small">Die Beispiele verwenden Slot 1. Für die anderen Slots die CVs aus Schritt 1 nehmen. Ein Slot kann so auf
+beiden LEDs etwas anderes senden als ein zweiter Slot: z. B. Slot 1 (rot) „Anhalten / Blinker rechts“ und Slot 2 (grün)
+„Weiterfahren / Abblendlicht ein“.</p>
+
+<h3>Schritt 4: Prüfen</h3>
+<ul>
+<li>Die Änderung wirkt sofort, ohne Neustart.</li>
+<li>Prüfen lässt sich die Wirkung mit einem Fahrzeug im IR-Testmodus von CarManager (Infrarot → Abstandsregelung: das
+Fahrzeug zeigt den Empfang mit den Blinkern) oder mit einem Oszilloskop an den LED-Leitungen.</li>
+</ul>
+
+<h3>Was man wissen muss</h3>
+<ul>
+<li><strong>CarManager überschreibt die Werte</strong>, sobald in diesem Slot ein anderer Befehl gewählt wird. CarManager zeigt
+den Slot vermutlich weiterhin als „Bremsen + Anhalten“ an, weil es seine eigene Menü-CV liest.</li>
+<li><strong>Die Filter der Feineinstellung (Spuren, Richtungen) nicht mehr ändern:</strong> CarManager schreibt dabei alle Codeblöcke
+neu und ersetzt die eigenen Befehle. Filter besser vorher einstellen; die Tabelle oben gilt für die Werkseinstellung (alle
+Spuren, beide Richtungen, <code>BE</code>/<code>3E</code>).</li>
+<li>Getestet ist die Variante mit gesetztem Kanalbit in <strong>beiden</strong> Codeblöcken (so wie CarManager es bei Bremsen +
+Anhalten schreibt). Ohne dieses Bit sollten sich die beiden Codes auf denselben LEDs abwechseln, wie bei Anhalten / Weiterfahren (mit beliebigen Paaren noch nicht getestet).</li>
+<li>Nur Befehle verwenden, die in einer Dauerschleife sinnvoll sind: absolute Befehle wie „Geschwindigkeit setzen“ oder
+„Funktion ein“, keine Umschaltbefehle (Sonderstatus umschalten).</li>
+</ul>
+
+<h2 id="s8">8 Speicherformat der Codes (Codeblock)</h2>
+<p>CarManager schreibt jeden Code als Block von bis zu 6 CVs: <code>Kopf, gespeicherte Bytes …, 00-Auffüllung</code>.</p>
+<table>
+<tr><th>Kopf-Bit</th><th>Bedeutung</th></tr>
+<tr><td>7</td><td>das Flag-Bit auf der Luft</td></tr>
+<tr><td>6</td><td>langer Blitz (26 µs) wenn gesetzt, kurzer (21 µs) wenn gelöscht; „Nahbereich“ erzwingt 21 µs</td></tr>
+<tr><td>5</td><td>getrennte Kanäle (Code 1 → LED 1, Code 2 → LED 2)</td></tr>
+<tr><td>4–3</td><td>nur im ungeklärten Platzhalter <code>7A</code> gesehen</td></tr>
+<tr><td>2–0</td><td>Anzahl Bytes (Befehlsbytes + CRC)</td></tr>
+</table>
+<p><strong>Gespeicherte Bytes = Bytes auf der Luft, invertiert.</strong> Gleichwertig: Daten = gespeichert XOR (<code>FF</code>
+bei Flag 1, sonst <code>00</code>). Beobachtete Köpfe: <code>03 23 43 44 C3 E3</code> (plus <code>7A</code>).</p>
+<p>Beispiel: Anhalten, Code 1 = <code>03 3E 01 AF 00 00</code>; Code 2 = <code>C3 41 FE 7F 00 00</code>
+(Flag 1, langer Blitz, Daten <code>BE 01 80</code>).</p>
+<p class="small">Beim Wechsel der Kategorie schreibt CarManager zuerst einen Platzhalter (<code>43 BE FF EB</code>, einmal
+<code>7A C4 AB</code>) und dann den eigentlichen Code. Die Bedeutung der Platzhalter ist unbekannt.</p>
+
+<h2 id="s9" class="pagebreak">9 Programmierschnittstelle (8401)</h2>
+<table>
+<tr><th>Merkmal</th><th>Wert</th></tr>
+<tr><td>Programmer</td><td>8401: Silicon Labs CP210x USB-UART, VID <code>10C4</code>, PID <code>EA60</code>, USB-Seriennummer <code>VIESSMANN_CARM</code></td></tr>
+<tr><td>Leitungsparameter</td><td><strong>38400 Baud, 8 Datenbits, gerade Parität, 1 Stoppbit (8E1)</strong>, keine Flusskontrolle, DTR und RTS low</td></tr>
+<tr><td>Stecker</td><td>eigener 3×2-Stiftstecker, passt in alle CarMotion-Geräte; der 8401 lädt Fahrzeuge auch über dieses Kabel. Die LED-Ausgänge des IR-Mini werden darüber nicht versorgt</td></tr>
+</table>
+
+<h3>Befehle</h3>
+<p>Anfragen in Kleinbuchstaben, Antworten in Großbuchstaben; CV-Nummern 16 Bit, höherwertiges Byte zuerst.</p>
+<table>
+<tr><th>Anfrage</th><th>Antwort</th><th>Bedeutung</th></tr>
+<tr><td><code>Who</code></td><td><code>ViessStop\0</code></td><td>Kennung</td></tr>
+<tr><td><code>Ver</code></td><td><code>i 01 06 03 xx</code></td><td>Firmware 1.06; <code>xx</code>: <code>01</code> nach Start/Neuverbindung, <code>02</code> während der Synchronisation, <code>00</code> ruhend</td></tr>
+<tr><td><code>c r</code> CVhi CVlo Wert <code>00</code></td><td><code>C r</code> CVhi CVlo Wert</td><td>CV lesen (der mitgesendete Wert wird ignoriert)</td></tr>
+<tr><td><code>c W</code> CVhi CVlo Wert <code>00</code></td><td><code>C W</code> CVhi CVlo Wert</td><td>CV schreiben, Antwort wiederholt den Wert</td></tr>
+<tr><td><code>c W 00 08 08 00</code></td><td><code>C W 00 08 08</code></td><td><strong>Werksreset</strong> (8 in CV8), Modul ca. 2 s beschäftigt</td></tr>
+</table>
+<pre>&gt; 63 72 00 01 4C 00    "cr" CV 0x0001, Wertfeld 0x4C, 00
+&lt; 43 72 00 01 4C       "Cr" CV 0x0001 = 0x4C (76)</pre>
+<ul>
+<li><code>Who</code>/<code>Ver</code> wiederholt CarManager etwa einmal pro Sekunde als Lebenszeichen.</li>
+<li>Bei jeder Verbindung und immer wenn das Modul Status <code>01</code> meldet, liest CarManager CV1–102 komplett.</li>
+<li>Ein CV-Schreibvorgang dauert rund 8–9 ms. CarManager schreibt nur geänderte CVs.</li>
+</ul>
+<div class="warn">
+<strong>Sicherheitsregeln für eigene Werkzeuge:</strong> niemals CV8 schreiben (Werksreset); DTR und RTS dauerhaft low halten
+wie CarManager; nur die bekannten Befehle <code>Who</code>, <code>Ver</code>, <code>cr</code>, <code>cW</code> senden; nur auf
+getestete Modul-Firmware (1.06) schreiben, sonst nur lesen; vor jedem Schreiben eine vollständige CV-Sicherung.
+Firmware-Updates laufen über dieselbe Verbindung und sind ausdrücklich nicht Gegenstand dieser Arbeit.
+</div>
+
+<h2 id="s10">10 CV-Tabelle des IR-Mini</h2>
+<table>
+<tr><th>CV</th><th>Werk</th><th>Bedeutung</th></tr>
+<tr><td>1</td><td>1</td><td>DCC-Zubehöradresse, niederwertiges Byte; Adresse = CV9 × 256 + CV1 (1–2048)</td></tr>
+<tr><td>2</td><td>0</td><td>unbekannt – von keiner CarManager-Einstellung geschrieben</td></tr>
+<tr><td>3</td><td>25</td><td>Sendeleistung = Blitzlänge: langer Blitz ≈ CV3 + 1 µs (1–25)</td></tr>
+<tr><td>4</td><td>5</td><td>Zusätzliche Annäherung: kurzer Blitz ≈ CV3 − CV4 + 1 µs</td></tr>
+<tr><td>5</td><td><code>3E</code></td><td>Filtermaske: Bit 3 Spur 0, Bit 4 Spur 1, Bit 5 Spur 2, Bit 2 Richtung A, Bit 1 Richtung B. Eine Änderung schreibt alle Codeblöcke neu</td></tr>
+<tr><td>6</td><td>0</td><td>Impulsgesteuerter Eingang (Analogmodus) in Sekunden, 0 = aus</td></tr>
+<tr><td>7</td><td>0</td><td>Betriebsart: <code>00</code> analog, <code>01</code> Fußgängerüberweg, <code>02</code> Bahnübergang, <code>03</code> Verkehrssteuerung Master, <code>04</code> DCC, <code>05</code> Verkehrssteuerung Slave</td></tr>
+<tr><td>8</td><td>–</td><td>8 schreiben = Werksreset; liest sich als <code>08</code></td></tr>
+<tr><td>9</td><td>0</td><td>DCC-Adresse, höherwertiges Byte</td></tr>
+<tr><td>10–24</td><td>Anhalten</td><td>Slot 1</td></tr>
+<tr><td>25–39</td><td>Weiterfahren</td><td>Slot 2</td></tr>
+<tr><td>40–54</td><td>Bremsen</td><td>Slot 3</td></tr>
+<tr><td>55</td><td>0</td><td>unbekannt</td></tr>
+<tr><td>56</td><td>0</td><td>Zeitlimit Slot 1 in Sekunden (0 = aus)</td></tr>
+<tr><td>57</td><td>0</td><td>+ Zufall bis zu … Sekunden (zum Zeitlimit)</td></tr>
+<tr><td>58</td><td>0</td><td>Invertierter Modus (Fußgängerüberweg / Verkehrssteuerung)</td></tr>
+<tr><td>59</td><td>25</td><td>Abfahrtverzögerung in 0,1 s (Werk 2,5 s)</td></tr>
+<tr><td>60</td><td>10</td><td>Verkehrssteuerung Phase grün/rot, Sekunden</td></tr>
+<tr><td>61</td><td>10</td><td>Verkehrssteuerung Phase rot/grün, Sekunden</td></tr>
+<tr><td>62</td><td>3</td><td>Verkehrssteuerung Phase rot/rot (Räumzeit), Sekunden</td></tr>
+<tr><td>63</td><td>2</td><td>unbekannt</td></tr>
+<tr><td>64–66</td><td>50</td><td>Geschwindigkeitsregler (km/h) von Slot 1–3 (nur Anzeige in CarManager)</td></tr>
+<tr><td>67–69</td><td>0</td><td>unbenutzt</td></tr>
+<tr><td>70–101</td><td>0</td><td>Beschreibung: ASCII, max. 32 Zeichen, <code>00</code>-terminiert</td></tr>
+<tr><td>102</td><td>0</td><td>unbenutzt</td></tr>
+</table>
+
+<h3>Befehlsslots</h3>
+<p>Drei Slots zu je 15 CVs (Basis 10, 25, 40). Sie gehören zu den drei Eingangszuständen, die die Status-LED anzeigt:</p>
+<table>
+<tr><th>Status-LED</th><th>Eingangszustand</th><th>Slot</th><th>Werk</th></tr>
+<tr><td>einfaches Blinken</td><td>Steuerleitung nicht verbunden</td><td>3</td><td>Bremsen</td></tr>
+<tr><td>doppeltes Blinken</td><td>Leitung verbunden (analog) oder Befehl „rot“</td><td>1</td><td>Anhalten</td></tr>
+<tr><td>dreifaches Blinken</td><td>Befehl „grün“</td><td>2</td><td>Weiterfahren</td></tr>
+</table>
+<ul>
+<li>Der Analogmodus kennt nur verbunden / nicht verbunden (Slots 1 und 3). DCC und die Ampel-/Übergangsmodi liefern rot und
+grün (Slots 1 und 2).</li>
+<li>Gemessen: Im DCC-Modus <strong>ohne</strong> DCC-Signal verhält sich das Modul wie im Analogmodus (blaue Leitung offen → Slot 3,
+verbunden → Slot 1), obwohl CarManager Slot 3 im DCC-Modus ausblendet.</li>
+<li>Ein Wechsel der Betriebsart schreibt nur CV7; Befehle werden nicht kopiert. Jede Spalte in CarManager schreibt genau einen Slot.</li>
+<li>Direkt geschriebene Codeblöcke wirken <strong>sofort</strong>.</li>
+</ul>
+<table>
+<tr><th>Offset</th><th>Slot 1</th><th>Slot 2</th><th>Slot 3</th><th>Inhalt</th></tr>
+<tr><td>+0</td><td>10</td><td>25</td><td>40</td><td>Menüauswahl in CarManager (Kategorie × 32 + Eintrag)</td></tr>
+<tr><td>+1</td><td>11</td><td>26</td><td>41</td><td>Eigene Distanz (cm)</td></tr>
+<tr><td>+2…+7</td><td>12–17</td><td>27–32</td><td>42–47</td><td>Codeblock 1</td></tr>
+<tr><td>+8…+13</td><td>18–23</td><td>33–38</td><td>48–53</td><td>Codeblock 2</td></tr>
+<tr><td>+14</td><td>24</td><td>39</td><td>54</td><td>Optionsbits: <code>01</code> Nahbereich, <code>04</code> Blinker rechts, <code>08</code> Blinker links, <code>10</code> von Einsatzfahrzeugen ignoriert, <code>80</code> Haltespur</td></tr>
+</table>
+<p>Menükategorien (CV10/25/40, obere 3 Bits): 0 kein Befehl, 1 Grundbefehle, 2 Verkehrsspuren, 3 Magnetfolgen, 4 Makros,
+5 direkte Funktion, 6 direkte Geschwindigkeit, 7 Rollende Landstraße.</p>
+
+<p>Wie man damit auf jeder LED einen beliebigen Befehl sendet, steht in Abschnitt 7.</p>
+
+<h2 id="s11">11 Weitere IR-Protokolle</h2>
+<p>CarMotion-Fahrzeuge unterscheiden mindestens drei, vermutlich vier IR-Signalarten. Sie unterscheiden sich im Zeitverhalten
+so stark, dass eine Fotodiode mit Mikrocontroller sie allein an den Flankenzeiten erkennen kann.</p>
+<table>
+<tr><th>Signal</th><th>Quelle</th><th>Muster</th></tr>
+<tr><td>NEC</td><td>Handsender 8402</td><td>38-kHz-Pakete, 9 ms Vorspann, Adresse <code>0x00</code></td></tr>
+<tr><td>Blitzrahmen (dieses Dokument)</td><td>IR-Mini und andere Module</td><td>einzelne Blitze 21–26 µs, Abstände 90 / 130 / 169 µs</td></tr>
+<tr><td>DCC über IR</td><td>DC-Car-/OpenCar-Haltepunkte (Kompatibilitätsmodus)</td><td>DCC-Rechtecksignal, Halbbits 58 µs / ~100 µs</td></tr>
+<tr><td>Fahrzeug zu Fahrzeug</td><td>vorausfahrendes Fahrzeug</td><td>noch nicht untersucht</td></tr>
+</table>
+
+<h3>Handsender 8402 (NEC, aus öffentlicher Quelle)</h3>
+<table>
+<tr><th>Taste</th><th>NEC-Befehl</th><th>Taste</th><th>NEC-Befehl</th></tr>
+<tr><td>Fahrzeug aus</td><td><code>0x45</code></td><td>Blinker links</td><td><code>0x07</code></td></tr>
+<tr><td>Beschleunigen</td><td><code>0x40</code></td><td>Blinker rechts</td><td><code>0x09</code></td></tr>
+<tr><td>Halt &amp; rückwärts</td><td><code>0x43</code></td><td>Warnblinker</td><td><code>0x5E</code></td></tr>
+<tr><td>Vorwärts fahren</td><td><code>0x15</code></td><td>Scheinwerfer</td><td><code>0x16</code></td></tr>
+<tr><td>Bremsen</td><td><code>0x19</code></td><td>Fernlicht</td><td><code>0x0C</code></td></tr>
+<tr><td>Rundumleuchte</td><td><code>0x18</code></td><td>Akkuanzeige</td><td><code>0x0D</code></td></tr>
+</table>
+<p class="small">Quelle: Stummiforum, „CarMotion: Steuerung via IR Fernbedienungsbefehle durch Arduino generiert“. Von uns noch
+nicht nachgemessen. Beim Halten einer Taste folgen NEC-Wiederholrahmen etwa alle 92 ms; einschalten lässt sich ein Fahrzeug per
+IR nicht.</p>
+
+<h3>DCC über IR</h3>
+<p>Die IR-LED wird direkt vom DCC-Gleissignal getrieben (ohne Träger), Reichweite etwa 20–30 cm; Fahrzeuge sind damit
+adressierbar. CarMotion-Fahrzeuge unterstützen das im Kompatibilitätsmodus (pro Fahrzeug einzuschalten; in Firmware 1.44
+defekt, ab 1.48 wieder korrigiert).</p>
+
+<h2 id="s12">12 Eigenes offenes Modul („Maxi“)</h2>
+<p>Parallel zur Analyse entsteht ein offenes IR-Modul auf ESP32-Basis (Prototyp: ESP32-C3, 2 Kanäle; Ziel: 8 Kanäle). Es
+erzeugt die Rahmen per Hardware-Timer (RMT, 1 µs Auflösung) und wird über das offene Netzwerkprotokoll MRRoIP gesteuert.</p>
+<ul>
+<li><strong>Verifiziert:</strong> Ein C-Encoder erzeugt jeden aufgezeichneten CarManager-Block exakt (37 Prüfungen); die
+Ausgabe des Moduls ist auf dem Oszilloskop Blitz für Blitz identisch mit dem Original (26,0 / 21,0 µs).</li>
+<li><strong>Pro Kanal eine Befehlsliste</strong>, die reihum gesendet wird (z. B. Geschwindigkeit + Licht), mit zufälliger
+Pause wie beim Original. Blitzlänge pro Befehl (normal / Nahbereich).</li>
+<li><strong>Direktbetrieb:</strong> Der Master sagt, was ein Kanal sendet:
+<code>{"ch1": [{"cmd": "speed", "arg": 30}, {"cmd": "function_on", "arg": 0}]}</code>.</li>
+<li><strong>Profile:</strong> gespeicherte Steuernachrichten mit Namen, die mehrere Kanäle zugleich setzen, z. B. für
+Kreuzungen: <code>{"profile": "ns_go", "actions": {"ch1": [{"cmd": "continue"}], "ch2": [{"cmd": "stop"}]}}</code>.
+Aufruf per Name oder Nummer; nicht genannte Kanäle bleiben unverändert. Ohne Master gilt ein Startprofil.</li>
+<li>Konfiguration und Steuerung als typisiertes JSON; das Modul prüft jeden Befehl beim Speichern.</li>
+</ul>
+<p class="small">Das Projekt baut nur Infrastruktur (Sender, Scanner, Netzwerkanbindung) und keine Fahrzeuge. Software unter
+Apache-2.0-Lizenz.</p>
+
+<h2 id="s13">13 Offene Punkte</h2>
+<ul>
+<li>Alle Fahrzeugreaktionen mit einem Ersatzfahrzeug prüfen: Geschwindigkeiten über 110 km/h, 4er-/5er-Magnetmuster,
+Blitzlänge gegen Empfangsdistanz, mehrere abwechselnde Befehle auf einer LED.</li>
+<li>Bedeutung von Byte-1-Bit 7 außerhalb der Funktionen; Platzhalter <code>BE FF</code> und <code>7A C4 AB</code>.</li>
+<li>CV2, CV55, CV63, CV102: von keiner Einstellung geschrieben.</li>
+<li>LED-Strom und Lichtleistung messen.</li>
+<li>Was die zweite LED im normalen (nicht getrennten) Modus sendet.</li>
+<li>Rot/Grün über eine echte Zentrale (DCC-Zubehörbefehle) bestätigen.</li>
+<li>Fahrzeug-zu-Fahrzeug-Rahmen (Abstandsregelung, Telemetrie) und der IR-Scanner 8406.</li>
+<li>Alles gilt für IR-Mini-Firmware 1.06; neuere Versionen (1.08) sind nicht untersucht.</li>
+</ul>
+
+</body>
+</html>

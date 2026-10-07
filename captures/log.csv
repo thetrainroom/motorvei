@@ -1,0 +1,64 @@
+file,kind,date,what_changed,carmanager_setting_after,module_fw,vehicle_fw,notes
+scope/2026-09-26_01_stop_both_codes,scope,2026-09-26,set command to stop (user via CarManager),stop (slot/options not recorded),1.06,n/a,first capture; code1 3E 01 (21us) + code2 BE 01 (26us)
+scope/2026-09-26_02_go,scope,2026-09-26,stop -> go,go (presumably continue / drive away),1.06,n/a,3E 00 + BE 00
+scope/2026-09-26_03_brake,scope,2026-09-26,go -> brake,brake,1.06,n/a,BE 02 only
+scope/2026-09-26_04_macro1,scope,2026-09-26,brake -> Macro 1,Macros / Macro 1,1.06,n/a,BE 04
+scope/2026-09-26_05_macro2,scope,2026-09-26,Macro 1 -> Macro 2,Macros / Macro 2 (blink left) on red and green,1.06,n/a,BE 05
+scope/2026-09-26_06_red_stop_green_macro2_noisy_probe,scope,2026-09-26,red -> Basic/stop (see usb/03),red Basic/stop; green Macro 2,1.06,n/a,module transmits green (DCC accessory state green); poor probe contact
+scope/2026-09-26_07_green_stop,scope,2026-09-26,green -> Basic/stop (see usb/05),red stop; green stop,1.06,n/a,
+scope/2026-09-26_08_green_stop_reprobed,scope,2026-09-26,probe re-attached,red stop; green stop,1.06,n/a,
+scope/2026-09-26_09_green_stop_cable_moved,scope,2026-09-26,probe cable moved,red stop; green stop,1.06,n/a,baseline for short range comparison
+scope/2026-09-26_10_green_stop_short_range,scope,2026-09-26,green short range ticked (see usb/06),green stop + short range,1.06,n/a,all flashes 21us
+scope/2026-09-26_11_green_reverse_in_range_short_range,scope,2026-09-26,green -> reverse while in range (see usb/07),green reverse in range + short range,1.06,n/a,BE 13 A1
+scope/2026-09-26_12_green_reverse_short_range_distance30cm,scope,2026-09-26,custom distance ticked (see usb/08),green reverse + short range + custom distance 30 cm,1.06,n/a,33-bit frame BE 13 1E 73
+scope/2026-09-26_13_green_speed50_short_range,scope,2026-09-26,green -> Direct speed 50 km/h (see usb/10),green set speed 50 km/h + short range,1.06,n/a,BE 2A 83
+scope/2026-09-26_14_green_brake_plus_stop_short_range,scope,2026-09-26,green -> brake + stop separate channels (see usb/16),green brake + stop + short range,1.06,n/a,probed LED BE 02; other LED 3E 40 via crosstalk (slow decay)
+usb/00_idle_heartbeat.pcapng,usb,2026-09-26,nothing (10 s idle),unchanged,1.06,n/a,Who/Ver heartbeat
+usb/01_open_direct_config.pcapng,usb,2026-09-26,opened Direct configuration page,unchanged,1.06,n/a,no module read (cached value)
+usb/02_read_cv1.pcapng,usb,2026-09-26,Direct configuration: Read CV1,unchanged,1.06,n/a,cr/Cr; CV1 = 76
+usb/03_red_macro2_to_basic_stop.pcapng,usb,2026-09-26,red: Macros/Macro 2 -> Basic commands/stop,red Basic/stop,1.06,n/a,CV10-23 written; placeholder 7A C4 AB
+usb/04_health_check.pcapng,usb,2026-09-26,nothing (after user reported earlier short circuit),unchanged,1.06,n/a,module answers heartbeat
+usb/05_green_macro2_to_basic_stop.pcapng,usb,2026-09-26,green: Macros/Macro 2 -> Basic commands/stop,green Basic/stop,1.06,n/a,CV25-38 written
+usb/06_green_stop_shortrange_on.pcapng,usb,2026-09-26,green: short range ticked,green stop + short range,1.06,n/a,only CV39 = 21
+usb/07_green_stop_to_reverse_in_range.pcapng,usb,2026-09-26,green: stop -> reverse (while in range),green reverse + short range,1.06,n/a,
+usb/08_green_reverse_custom_distance_on.pcapng,usb,2026-09-26,green: custom distance ticked (default 30 cm),green reverse + short range + 30 cm,1.06,n/a,CV26 = 1E; 4-byte code
+usb/09_green_reverse_to_magnet_N.pcapng,usb,2026-09-26,green: Basic -> Magnetic sequence/magnet N (misclick; intended Direct speed),green magnet N,1.06,n/a,
+usb/10_green_magnet_N_to_direct_speed.pcapng,usb,2026-09-26,green: magnet N -> Direct speed/set speed (50 km/h),green speed 50 km/h,1.06,n/a,
+usb/11_green_speed_sweep.pcapng,usb,2026-09-26,green speed slider 0 5 10 15 20 110 km/h,green speed 110 km/h,1.06,n/a,CV65 = km/h
+usb/12_green_speed_to_direct_function.pcapng,usb,2026-09-26,green: Direct speed -> Direct function/Main lights on permanent,green Main lights on permanent,1.06,n/a,
+usb/13_green_function_light_off_nonperm.pcapng,usb,2026-09-26,green: Main lights on -> off; then permanent unticked,green Main lights off non-permanent,1.06,n/a,two changes in one capture (timestamps separate them)
+usb/14_green_function_list_sweep_off_nonperm.pcapng,usb,2026-09-26,green: function list High beam ... Sound: shout,green Sound: shout,1.06,n/a,11 steps
+usb/15_green_function_to_traffic_lanes.pcapng,usb,2026-09-26,green: -> Traffic lanes; list lane 0 ... direction B,green set traffic direction B,1.06,n/a,8 entries
+usb/16_green_lanes_to_basic_brake_plus_stop.pcapng,usb,2026-09-26,green: -> Basic/stop -> brake -> brake + stop,green brake + stop (separate channels),1.06,n/a,header bit 5
+usb/17_green_magnetic_sequence_sweep.pcapng,usb,2026-09-26,green: -> Magnetic sequence; list N ... SSS,green magnet SSS,1.06,n/a,8 entries
+usb/18_reset_all.pcapng,usb,2026-09-26,Reset all (confirmed by user): CV8 = 8 then read-back of CV1-102,factory: analogue mode; blue connected stop; disconnected brake; DCC address 1,1.06,n/a,full factory CV dump; module was at DCC 332 before
+scope/2026-09-27_01_factory_analogue_dual_channel,scope,2026-09-27,first dual-channel capture (CH1 + CH2); CH1 flash ~2.2 V,factory analogue; slot 1 stop,1.06,n/a,CH2 too weak to decode
+scope/2026-09-27_02_factory_analogue_dual_channel_fine,scope,2026-09-27,finer vertical scales,factory analogue; stop,1.06,n/a,CH2 0.16 V (probe across intact LED - clamped)
+scope/2026-09-27_03_factory_dual_channel_ch2_improved,scope,2026-09-27,CH2 connection improved by user,stop,1.06,n/a,CH2 clipped (range too small)
+scope/2026-09-27_04_factory_dual_channel_ch2_wide,scope,2026-09-27,CH2 2 V/div,stop,1.06,n/a,CH2 ~14 V; CH1 = 0.1 x CH2 -> both probes on the same shared node
+scope/2026-09-27_05_brake_plus_stop_dual_channel,scope,2026-09-27,user set brake + stop,brake + stop (both columns),1.06,n/a,both probes see 3E 40 + BE 02 (shared node)
+scope/2026-09-27_06_user_different_command_per_led,scope,2026-09-27,user: different command per LED (no change visible),brake + stop,1.06,n/a,identical to _05
+scope/2026-09-27_07_slot3_code1_speed30_code2_brake,scope,2026-09-27,after writing slot 3 code 1 = speed 30 (usb/21),brake + stop in GUI; slot 3 code 1 custom,1.06,n/a,output unchanged: blue wire was CONNECTED -> slot 1 active
+scope/2026-09-27_08_after_cv40_rewrite,scope,2026-09-27,after rewriting CV40 with same value (usb/22),same,1.06,n/a,output unchanged
+scope/2026-09-27_09_after_slot1_code1_speed30,scope,2026-09-27,after writing slot 1 code 1 = speed 30 (usb/23),slot 1 code 1 custom (BE 26) + code 2 brake,1.06,n/a,blue wire connected; custom block transmitted: BE 26 20 (21 us) + BE 02 62 (26 us)
+usb/19_read_slot_headers.pcapng,usb,2026-09-27,header reads via Direct configuration,unchanged,1.06,n/a,EMPTY - programmer had a new USB address (7 instead of 27)
+usb/20_read_slot_headers.pcapng,usb,2026-09-27,read CV10 12 18 25 27 33 40 42 48,unchanged,1.06,n/a,slots 1 and 3 = brake + stop; slot 2 = continue
+usb/21_slot3_code1_to_speed30.pcapng,usb,2026-09-27,Direct configuration: CV43-45 then CV42 = A3 41 D9 DF; read back,slot 3 code 1 = speed 30,1.06,n/a,
+usb/22_rewrite_cv40_same_value.pcapng,usb,2026-09-27,Direct configuration: CV40 = 34 (unchanged value),same,1.06,n/a,no reload effect
+usb/23_slot1_code1_to_speed30.pcapng,usb,2026-09-27,Direct configuration: CV13-15 then CV12 = A3 41 D9 DF,slot 1 code 1 = speed 30,1.06,n/a,takes effect immediately
+usb/24_slot3_code1_to_lights_on.pcapng,usb,2026-09-27,Direct configuration: CV43-45 then CV42 = 23 BE 70 26; read back,slot 3 code 1 = main lights on permanent,1.06,n/a,
+scope/2026-09-27_10_blue_disconnected_slot3_lights_brake,scope,2026-09-27,blue wire disconnected by user,slot 3: BE 70 lights + BE 02 brake,1.06,n/a,slot 3 active when blue disconnected (matches GUI labels)
+NOTE,note,2026-09-27,"all 2026-09-27 two-channel captures (_01 to _10): CH1 and CH2 ground clips were on the 'other side' of each LED; the scope ties both grounds together, which connects the two LED channels -> both probes see both codes. Frame content and timing are valid; per-LED attribution is NOT.",,1.06,n/a,
+scope/2026-09-27_11_single_ground_ch1_lights_brake,scope,2026-09-27,CH2 ground clip removed (single ground: CH1 clip on other wire of torn-off LED cable),slot 3: code 1 BE 70 lights + code 2 BE 02 brake (blue disconnected),1.06,n/a,"CH1 (torn-off LED): BE 02 sharp (own), BE 70 slow decay (coupled) -> torn-off LED = code 2 (brake in original brake+stop); CH2 reference poor, inconclusive"
+NOTE,note,2026-09-27,"correction for 2026-09-26_14 and 2026-09-27_11: the probed torn-off LED has the white cable marking (stop LED). Its own output shows the SLOW DECAY (no load fitted); the sharp frames are the other LED coupled over. So code 1 (3E 40 / self-built) -> white-marked LED, code 2 (BE 02 brake) -> unmarked LED.",,1.06,n/a,
+scope/2026-09-27_12_red_led_load_on_white_cable,scope,2026-09-27,red LED fitted as load across the torn-off (white-marked) LED cable end,slot 3: code 1 BE 70 lights + code 2 BE 02 brake,1.06,n/a,"CH1: during BE 70 flat 1.87 V (red LED forward voltage -> own channel = code 1 on white-marked LED); during BE 02 sag then -2.1 V (reverse, other channel). Reference still the LED's second wire; CH2 clipped. Supports code 1 -> white LED."
+usb/26_programmer_replug.pcapng,usb,2026-09-27,"capture of all devices (-A) on USBPcap1; user unplugged and re-plugged the 8401",slot1 speed30+brake / slot3 lights+brake,1.06,n/a,"programmer address 7 -> 8; CP210x setup 38400 8E1, DTR/RTS low; Ver status 01 after connect; CarManager reads CV1-102 on connect (CV8 = 08)"
+usb/27_module_power_cycle.pcapng,usb,2026-09-27,"-A capture; user switched the IR Mini supply off (~18 s) and on (~26 s)",unchanged,1.06,n/a,"no replies for 7.9 s; after power-up Ver status 01, CarManager reads CV1-102, then status 00; no writes"
+NOTE,note,2026-09-27,"usb/25 to usb/171: full CarManager settings sweep, one capture per GUI step; see captures/sweep.csv (step, GUI change, CV writes) and captures/screens/",,1.06,n/a,
+scope/2026-09-27_14_analogue_blue_disconnected,scope,2026-09-27,baseline before mode switch,analogue; slot1 BF 2A (set default speed); slot2 continue; slot3 brake,1.06,n/a,sent BE 02 (slot 3)
+scope/2026-09-27_15_dcc_nosignal_blue_disconnected,scope,2026-09-27,mode -> DCC (usb/172); 16 V AC supply (no DCC signal); blue wire disconnected,same slots,1.06,n/a,sent BE 02 (slot 3) -> analogue fallback
+scope/2026-09-27_16_dcc_nosignal_blue_connected,scope,2026-09-27,user connected the blue wire,same slots,1.06,n/a,sent BF 2A (slot 1) -> analogue fallback confirmed
+NOTE,note,2026-09-27,"correction: 2026-09-26 captures were powered by the ESU LokProgrammer DCC output (DCC signal present, module in DCC mode, address 332) - explains slot 2 (green) being transmitted; 2026-09-27 captures on 16 V AC transformer",,1.06,n/a,
+scope/2026-09-28_01_esp32c3_milestone1_ch1_speed50_stop_ch2_brake,scope,2026-09-28,ESP32-C3 (ESP-C3-12F-Kit) running firmware/transmitter milestone 1; CH1 probe on IO10; CH2 on IO1; one ground on board GND; USB powered,ch1: speed 50 + stop; ch2: brake,n/a (our firmware),n/a,"all frames match the original: BE 2A 83 / BE 01 80 (26 us) / 3E 01 AF (21 us); BE 02 62 (26 us). Use rise threshold ~half swing (overshoot -1 V)"
+scope/2026-09-28_02_mrroip_ch1_speed30_lights_ch2_lane1_magnetSNS,scope,2026-09-28,"firmware/transmitter milestone 2 (MRRoIP); playlists set with mrroip.Device control (repeated over UDP while capturing); CH1 IO10, CH2 IO1",ch1 speed 30 + main lights on perm; ch2 lane 1 + magnet SNS short,n/a (our firmware),n/a,"all frames code-exact: BE 26 20 / BE 70 26 (26 us); BE 18 81 (26 us) / BE 45 A7 (21 us); after release back to defaults"
+scope/2026-09-28_03_presets_ch1_p4_speed30_lights_ch2_p3_busstop,scope,2026-09-28,"firmware/transmitter profile 0.2 (numbered presets, PARAM_RECORDS in the MRRoIP C core); presets set via /config, master held {ch1:4, ch2:3} over UDP; CH1 IO10, CH2 IO1",ch1 preset 4 speed_30 (speed 30 + function 0 perm); ch2 preset 3 bus_stop (brake + function 4 on short),n/a (our firmware),n/a,"code-exact: BE 26 20 / BE 70 26 (26 us); BE 02 62 (26 us) / BE 64 DA (21 us); after release back to default presets 3/1; presets survive reboot"

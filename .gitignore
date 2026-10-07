@@ -1,0 +1,29 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# macOS
+.DS_Store
+
+# Raw captures: large and contain device names / serial numbers — kept in a private repository
+captures/usb/
+captures/scope/
+captures/screens/
+
+# Personal bench access (IP addresses, user names, keys)
+tools/ssh_config
+setup/setup-ssh-key.ps1
+
+# ESP-IDF build output
+firmware/**/build/
+firmware/**/sdkconfig
+firmware/**/sdkconfig.old
+firmware/**/managed_components/
+firmware/**/dependencies.lock
+
+# Private notes (copy kept in the private repository)
+docs/PUBLISHING.md
+
+# Draft forum posts (copy kept in the private repository)
+docs/community/

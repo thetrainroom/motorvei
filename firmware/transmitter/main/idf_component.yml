@@ -1,0 +1,8 @@
+dependencies:
+  # The MRRoIP core, developed alongside: ~/src/mrroip checked out beside ~/src/viessmann.
+  # To build against a release instead, replace the path with (the two are exclusive):
+  #   git: git@github.com:thetrainroom/mrroip.git
+  #   version: v0.2.0
+  #   path: components/mrroip
+  mrroip:
+    path: ../../../../mrroip/components/mrroip

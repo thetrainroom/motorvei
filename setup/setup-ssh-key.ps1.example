@@ -1,0 +1,27 @@
+# Copy to setup-ssh-key.ps1 (git-ignored), put your public key below.
+# Authorise the Mac's SSH key on this Windows laptop (CarManager / USBPcap machine).
+# Run in an Administrator PowerShell:
+#   powershell -ExecutionPolicy Bypass -File .\setup-ssh-key.ps1
+
+$key = 'ssh-ed25519 AAAA...your-public-key... you@your-mac'   # contents of ~/.ssh/id_ed25519.pub
+
+# Admin accounts: sshd reads this file. Permissions must be Administrators + SYSTEM only,
+# set by SID so it works regardless of Windows language (Administratorer, Administratoren, ...).
+$admin = 'C:\ProgramData\ssh\administrators_authorized_keys'
+Set-Content -Path $admin -Value $key -Encoding ascii
+icacls $admin /inheritance:r /grant '*S-1-5-32-544:F' /grant '*S-1-5-18:F'
+
+# Non-admin accounts: sshd reads this file instead.
+New-Item -ItemType Directory -Force "$env:USERPROFILE\.ssh" | Out-Null
+Set-Content -Path "$env:USERPROFILE\.ssh\authorized_keys" -Value $key -Encoding ascii
+
+Restart-Service sshd
+
+Write-Host "`n--- Diagnostics ---"
+whoami
+$isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+Write-Host "Running as administrator: $isAdmin"
+net localgroup (New-Object Security.Principal.SecurityIdentifier('S-1-5-32-544')).Translate([Security.Principal.NTAccount]).Value.Split('\')[1]
+icacls $admin
+Select-String -Path C:\ProgramData\ssh\sshd_config -Pattern 'Match|AuthorizedKeysFile|PubkeyAuthentication'
+Get-Service sshd

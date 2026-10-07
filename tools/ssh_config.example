@@ -1,0 +1,6 @@
+# SSH config for the CarManager / USBPcap laptop. Copy to tools/ssh_config (git-ignored) and fill in.
+# Use: ssh -F tools/ssh_config carlaptop
+Host carlaptop
+    HostName 192.168.1.60
+    User "your windows user"
+    IdentityFile ~/.ssh/id_ed25519
